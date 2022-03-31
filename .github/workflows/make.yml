@@ -32,9 +32,9 @@ jobs:
           mkdir /opt/build
           mkdir /opt/dist
           cd /opt/build
-          curl -L ${{github.event.inputs.pat-address}} -o ds.pat
-          curl -L ${{github.event.inputs.toolchain}} -o toolchain.txz
-          curl -L ${{github.event.inputs.linux-src}} -o linux.tar.xz
+          wget ${{github.event.inputs.pat-address}} -O ds.pat
+          wget ${{github.event.inputs.toolchain}} -O toolchain.txz
+          wget ${{github.event.inputs.linux-src}} -O linux.tar.xz
           mkdir pat
           tar xf ds.pat -C pat
           # is update_pack
