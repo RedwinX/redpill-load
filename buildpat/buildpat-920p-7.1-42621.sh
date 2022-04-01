@@ -19,3 +19,6 @@ tar -czvf archive.tar.gz ./
 mv archive.tar.gz ../ds920p_42621.pat
 cd ../
 rm -r ds.pat oldpat.tar.gz pat synoesp
+sum=`sha256sum ds920p_42621.pat | awk '{print $1}'`
+sed -i "s/e7fa975757d5faa6a275b68b130e7fd552263157a39bc71507ea6f2f466bb359/$sum/" ../config/DS920+/7.1-42621/config.json
+mv ds920p_42621.pat ../cache/
