@@ -1,4 +1,4 @@
-curl -L https://global.download.synology.com/download/DSM/release/7.1/42621/DSM_DS918%2B_42621.pat -o ds.pat
+curl -L https://global.download.synology.com/download/DSM/release/7.1/42621/DSM_DS920%2B_42621.pat -o ds.pat
 mkdir synoesp
 curl --location https://global.download.synology.com/download/DSM/release/7.0.1/42218/DSM_DS3622xs%2B_42218.pat --output oldpat.tar.gz
 tar -C./synoesp/ -xf oldpat.tar.gz rd.gz
@@ -14,11 +14,8 @@ mkdir pat
 #tar xf ds.pat -C pat
 ls -lh ./
 sudo LD_LIBRARY_PATH=synoesp/extract synoesp/extract/syno_extract_system_patch ds.pat pat || echo "extract latest pat"
-echo "test4"
-# is update_pack
-if [ ! -f "pat/zImage" ]; then
-  cd pat
-  ar x $(ls flashupdate*)
-  tar xf data.tar.xz
-  cd ..
-fi
+cd pat
+tar -czvf archive.tar.gz ./
+mv archive.tar.gz ../ds920p_42621.pat
+cd ../
+rm -r ds.pat oldpat.tar.gz pat synoesp
