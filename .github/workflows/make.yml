@@ -3,14 +3,18 @@ name: Make kernel bs patch
 on:
   workflow_dispatch:
     inputs:
-      pat-address:
-        description: 'Pat file URL'
+      dsmodel:
+        description: 'Input Full DSM model [DS3622xs+|RS4021xs+|DVA3221|DS918+|DS920+|DS3615xs]'
         required: true
-        default: 'https://global.download.synology.com/download/DSM/release/7.1/42621/DSM_DS918%2B_42621.pat'
+        default: 'DS3622xs+'
+      os_version:
+        description: 'Must build DSM7.1 and after DSM versions'
+        required: true
+        default: '42621'
       toolchain:
         description: 'DSM toolchain URL for repack zImage'
         required: true
-        default: 'https://sourceforge.net/projects/dsgpl/files/Tool%20Chain/DSM%207.0.0%20Tool%20Chains/Intel%20x86%20Linux%204.4.180%20%28Apollolake%29/apollolake-gcc750_glibc226_x86_64-GPL.txz/download'
+        default: 'https://downloads.sourceforge.net/project/dsgpl/Tool%20Chain/DSM%207.0.0%20Tool%20Chains/Intel%20x86%20Linux%204.4.180%20%28Broadwellnk%29/broadwellnk-gcc750_glibc226_x86_64-GPL.txz'
 
       linux-src:
         description: 'Linux kernel source URL for repack zImage'
@@ -26,7 +30,10 @@ jobs:
         env:
             ACTIONS_STEP_DEBUG: true
         run: |
-          patfile=$(basename ${{github.event.inputs.pat-address}} | while read; do echo -e ${REPLY//%/\\x}; done)
+          dsmodel=${{github.event.inputs.dsmodel}}
+          os_version=${{github.event.inputs.os_version}}
+          pat_address="https://global.download.synology.com/download/DSM/release/7.1/"${os_version}"/DSM_"${dsmodel}"_"${os_version}".pat"
+          patfile=$(basename ${pat_address} | while read; do echo -e ${REPLY//%/\\x}; done)
           echo "::set-output name=patfile::$patfile"
           # install bsdiff
           sudo apt-get install -y bsdiff cpio xz-utils
@@ -34,7 +41,7 @@ jobs:
           mkdir /opt/build
           mkdir /opt/dist
           cd /opt/build
-          curl -L ${{github.event.inputs.pat-address}} -o ds.pat
+          curl -L ${pat_address} -o ds.pat
           curl -L ${{github.event.inputs.toolchain}} -o toolchain.txz
           curl -L ${{github.event.inputs.linux-src}} -o linux.tar.xz
           
@@ -70,10 +77,9 @@ jobs:
           # extract vmlinux
           ./linux-src/scripts/extract-vmlinux pat/zImage > vmlinux
           # sha256
-          sha256sum ds.pat >> checksum.sha256
-          sha256sum pat/zImage >> checksum.sha256
-          sha256sum pat/rd.gz >> checksum.sha256
-          sha256sum vmlinux >> checksum.sha256
+          zlinux_sha256=`sha256sum pat/zImage`; echo ${zlinux_sha256} >> checksum.sha256
+          ramdisk_sha256=`sha256sum pat/rd.gz`; echo ${ramdisk_sha256} >> checksum.sha256
+          vmlinux_sha256=`sha256sum vmlinux`; echo ${vmlinux_sha256} >> checksum.sha256
           # patch vmlinux
           # vmlinux_mod.bin
           curl -L https://github.com/jumkey/dsm-research/raw/master/tools/common.php -o common.php
@@ -126,6 +132,23 @@ jobs:
           cp diff.bsp /opt/dist
           cp checksum.sha256 /opt/dist
           echo '---END---'
+          git clone -b develop --depth=1 https://github.com/dogodefi/redpill-load.git
+          cd redpill-load
+          mkdir -p config/${dsmodel}/7.1.0-${os_version} && cd config/${dsmodel}/7.1.0-${os_version}
+          cp ../template/config.json ./
+          sed -i 's/os_version_template/${os_version}/g; s/zlinux_sha256/${zlinux_sha256}/g; s/ramdisk_sha256/${ramdisk_sha256}/g; s/vmlinux_sha256/${vmlinux_sha256}/g' config.json
+          cp /opt/dist/diff.bsp zImage-001-${dsmodel}-${os_version}-ramdisk-and-header.bsp
+          
+      - name: commit
+        run: |
+          git config --global user.email anonymous@gmail.com
+          git config --global user.name anonymous
+          git add .
+          git commit -m "update config ${dsmodel}/7.1.0-${os_version}" -a     
+      - name: Push changes
+        uses: ad-m/github-push-action@master
+        with:
+         github_token: ${{ secrets.GITHUB_TOKEN }}     
       - name: Upload
         uses: actions/upload-artifact@v2
         with:
