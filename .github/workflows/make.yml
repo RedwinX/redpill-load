@@ -141,8 +141,7 @@ jobs:
           
       - name: commit
         run: |
-          git config --global user.email anonymous@gmail.com
-          git config --global user.name anonymous
+          git config --global user.name RedwinX
           git add .
           git commit -m "update config ${dsmodel}/7.1.0-${os_version}" -a     
       - name: Push changes
