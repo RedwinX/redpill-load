@@ -132,11 +132,6 @@ jobs:
           cp diff.bsp /opt/dist
           cp checksum.sha256 /opt/dist
           echo '---END---'
-          git clone -b develop --depth=1 https://github.com/dogodefi/redpill-load.git
-          cd redpill-load
-          mkdir -p config/${dsmodel}/7.1.0-${os_version} && cd config/${dsmodel}/7.1.0-${os_version}
-          cp ../template/config.json ./
-          sed -i 's/os_version_template/${os_version}/g; s/zlinux_sha256/${zlinux_sha256}/g; s/ramdisk_sha256/${ramdisk_sha256}/g; s/vmlinux_sha256/${vmlinux_sha256}/g' config.json
           cp /opt/dist/diff.bsp zImage-001-${dsmodel}-${os_version}-ramdisk-and-header.bsp     
       - name: Upload
         uses: actions/upload-artifact@v2
