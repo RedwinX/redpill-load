@@ -1,20 +1,16 @@
-name: Make kernel bs patch
+name: Make kernel bs patch for 7.2 using fb kpatch
 
 on:
   workflow_dispatch:
     inputs:
-      dsmodel:
-        description: 'Input Full DSM model [DS3622xs+|RS4021xs+|DVA3221|DS918+|DS920+|DS3615xs]'
+      pat-address:
+        description: 'Pat file URL'
         required: true
-        default: 'DS3622xs+'
-      os_version:
-        description: 'Must build DSM7.1 and after DSM versions'
-        required: true
-        default: '42621'
+        default: 'https://global.synologydownload.com/download/DSM/beta/7.2/64216/DSM_DS920%2B_64216.pat'
       toolchain:
         description: 'DSM toolchain URL for repack zImage'
         required: true
-        default: 'https://downloads.sourceforge.net/project/dsgpl/Tool%20Chain/DSM%207.0.0%20Tool%20Chains/Intel%20x86%20Linux%204.4.180%20%28Broadwellnk%29/broadwellnk-gcc750_glibc226_x86_64-GPL.txz'
+        default: 'https://global.synologydownload.com/download/ToolChain/toolchain/7.2-63134/Intel%20x86%20Linux%204.4.302%20%28GeminiLake%29/geminilake-gcc1220_glibc236_x86_64-GPL.txz'
 
       linux-src:
         description: 'Linux kernel source URL for repack zImage'
@@ -30,10 +26,7 @@ jobs:
         env:
             ACTIONS_STEP_DEBUG: true
         run: |
-          dsmodel=${{github.event.inputs.dsmodel}}
-          os_version=${{github.event.inputs.os_version}}
-          pat_address="https://global.download.synology.com/download/DSM/release/7.1/"${os_version}"/DSM_"${dsmodel}"_"${os_version}".pat"
-          patfile=$(basename ${pat_address} | while read; do echo -e ${REPLY//%/\\x}; done)
+          patfile=$(basename ${{github.event.inputs.pat-address}} | while read; do echo -e ${REPLY//%/\\x}; done)
           echo "::set-output name=patfile::$patfile"
           # install bsdiff
           sudo apt-get install -y bsdiff cpio xz-utils
@@ -41,13 +34,13 @@ jobs:
           mkdir /opt/build
           mkdir /opt/dist
           cd /opt/build
-          curl -L ${pat_address} -o ds.pat
-          curl -L ${{github.event.inputs.toolchain}} -o toolchain.txz
-          curl -L ${{github.event.inputs.linux-src}} -o linux.tar.xz
+          curl --insecure -L ${{github.event.inputs.pat-address}} -o ds.pat
+          curl --insecure -L ${{github.event.inputs.toolchain}} -o toolchain.txz
+          curl --insecure -L ${{github.event.inputs.linux-src}} -o linux.tar.xz
           
           # download old pat for syno_extract_system_patch # thanks for jumkey's idea.
           mkdir synoesp
-          curl --location https://global.download.synology.com/download/DSM/release/7.0.1/42218/DSM_DS3622xs%2B_42218.pat --output oldpat.tar.gz
+          curl --insecure --location https://global.download.synology.com/download/DSM/release/7.0.1/42218/DSM_DS3622xs%2B_42218.pat --output oldpat.tar.gz
           tar -C./synoesp/ -xf oldpat.tar.gz rd.gz
           cd synoesp
           xz -dc < rd.gz >rd 2>/dev/null || echo "extract rd.gz"
@@ -77,16 +70,25 @@ jobs:
           # extract vmlinux
           ./linux-src/scripts/extract-vmlinux pat/zImage > vmlinux
           # sha256
-          zlinux_sha256=`sha256sum pat/zImage`; echo ${zlinux_sha256} >> checksum.sha256
-          ramdisk_sha256=`sha256sum pat/rd.gz`; echo ${ramdisk_sha256} >> checksum.sha256
-          vmlinux_sha256=`sha256sum vmlinux`; echo ${vmlinux_sha256} >> checksum.sha256
+          sha256sum ds.pat >> checksum.sha256
+          sha256sum pat/zImage >> checksum.sha256
+          sha256sum pat/rd.gz >> checksum.sha256
+          sha256sum vmlinux >> checksum.sha256
           # patch vmlinux
           # vmlinux_mod.bin
-          curl -L https://github.com/jumkey/dsm-research/raw/master/tools/common.php -o common.php
-          curl -L https://github.com/jumkey/dsm-research/raw/master/tools/patch-ramdisk-check.php -o patch-ramdisk-check.php
-          curl -L https://github.com/jumkey/dsm-research/raw/master/tools/patch-boot_params-check.php -o patch-boot_params-check.php
-          php patch-boot_params-check.php vmlinux vmlinux-mod
-          php patch-ramdisk-check.php vmlinux-mod vmlinux_mod.bin
+          #curl -L https://github.com/jumkey/dsm-research/raw/master/tools/common.php -o common.php
+          #curl -L https://github.com/jumkey/dsm-research/raw/master/tools/patch-ramdisk-check.php -o patch-ramdisk-check.php
+          #curl -L https://github.com/jumkey/dsm-research/raw/master/tools/patch-boot_params-check.php -o patch-boot_params-check.php
+          #php patch-boot_params-check.php vmlinux vmlinux-mod
+          #php patch-ramdisk-check.php vmlinux-mod vmlinux_mod.bin
+          # New fabio patching method 
+          echo "Patching Kernel"
+          curl --insecure -L https://github.com/pocopico/tinycore-redpill/raw/main/tools/bzImage-to-vmlinux.sh -o bzImage-to-vmlinux.sh
+          curl --insecure -L https://github.com/pocopico/tinycore-redpill/raw/main/tools/kpatch -o kpatch
+          curl --insecure -L https://github.com/pocopico/tinycore-redpill/raw/main/tools/vmlinux-to-bzImage.sh -o vmlinux-to-bzImage.sh
+          chmod +x kpatch 
+          ./kpatch vmlinux vmlinux_mod.bin
+          #vmlinux-to-bzImage.sh vmlinux-mod bzImage
           git clone https://github.com/kiler129/recreate-zImage.git
           chmod +x recreate-zImage/rebuild_kernel.sh
           cd linux-src
@@ -126,15 +128,15 @@ jobs:
           # ----------
           cd ..
           bsdiff pat/zImage zImage_mod diff.bsp
+          sha256sum /opt/build/diff.bsp >> checksum.sha256
           echo '---copy file---'
           cp vmlinux /opt/dist
           cp vmlinux_mod.bin /opt/dist
           cp diff.bsp /opt/dist
           cp checksum.sha256 /opt/dist
           echo '---END---'
-          cp /opt/dist/diff.bsp zImage-001-${dsmodel}-${os_version}-ramdisk-and-header.bsp     
       - name: Upload
         uses: actions/upload-artifact@v2
         with:
-          name: kernel bs patch for ${{ steps.bulid-bsp.outputs.patfile }}
+          name: kernel bs fb patch for ${{ steps.bulid-bsp.outputs.patfile }}
           path: /opt/dist
